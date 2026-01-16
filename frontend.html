@@ -1,0 +1,858 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OSINT Globe - Geopolitical Event Tracker</title>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <style>
+        :root {
+            --bg-primary: #0a0e14;
+            --bg-secondary: #111820;
+            --bg-tertiary: #1a2332;
+            --bg-card: rgba(17, 24, 32, 0.95);
+            --border-color: rgba(255, 160, 50, 0.15);
+            --text-primary: #e8eaed;
+            --text-secondary: #8b9298;
+            --text-muted: #5a6370;
+            --accent-orange: #ff9f43;
+            --accent-amber: #ffc048;
+            --accent-green: #26de81;
+            --accent-blue: #4dabf7;
+            --priority-critical: #ff4757;
+            --priority-high: #ff9f43;
+            --priority-medium: #ffc048;
+            --priority-low: #26de81;
+            --glow-orange: 0 0 20px rgba(255, 159, 67, 0.4);
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Space Grotesk', sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+            overflow: hidden;
+        }
+
+        .header {
+            position: fixed;
+            top: 0; left: 0; right: 0;
+            height: 64px;
+            background: var(--bg-secondary);
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            align-items: center;
+            padding: 0 20px;
+            z-index: 1000;
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .logo-icon {
+            width: 40px; height: 40px;
+            background: linear-gradient(135deg, var(--accent-orange), var(--accent-amber));
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            box-shadow: var(--glow-orange);
+        }
+
+        .logo-text { display: flex; flex-direction: column; }
+        .logo-title { font-weight: 700; font-size: 16px; }
+        .logo-subtitle { font-size: 11px; color: var(--text-secondary); font-family: 'JetBrains Mono', monospace; }
+
+        .header-actions {
+            display: flex;
+            gap: 12px;
+            margin-left: auto;
+        }
+
+        .btn {
+            padding: 10px 18px;
+            border-radius: 8px;
+            font-family: inherit;
+            font-weight: 500;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            border: none;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, var(--accent-orange), var(--accent-amber));
+            color: var(--bg-primary);
+        }
+
+        .btn-primary:hover {
+            box-shadow: var(--glow-orange);
+            transform: translateY(-2px);
+        }
+
+        .btn-primary:active {
+            transform: scale(0.95);
+        }
+
+        .btn-secondary {
+            background: var(--bg-tertiary);
+            color: var(--text-primary);
+            border: 1px solid var(--border-color);
+        }
+
+        .btn-secondary:hover {
+            border-color: var(--accent-orange);
+        }
+
+        /* Config Panel */
+        .config-panel {
+            position: fixed;
+            top: 80px;
+            left: 20px;
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 16px;
+            z-index: 500;
+            width: 300px;
+            display: none;
+        }
+
+        .config-panel.active { display: block; }
+
+        .config-title {
+            font-weight: 600;
+            margin-bottom: 12px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .config-input {
+            width: 100%;
+            padding: 10px 12px;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            color: var(--text-primary);
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 12px;
+            margin-bottom: 12px;
+        }
+
+        .config-input:focus {
+            outline: none;
+            border-color: var(--accent-orange);
+        }
+
+        .config-label {
+            font-size: 12px;
+            color: var(--text-secondary);
+            margin-bottom: 6px;
+            display: block;
+        }
+
+        .config-status {
+            font-size: 11px;
+            padding: 8px;
+            border-radius: 6px;
+            margin-top: 8px;
+        }
+
+        .config-status.success {
+            background: rgba(38, 222, 129, 0.1);
+            color: var(--accent-green);
+        }
+
+        .config-status.error {
+            background: rgba(255, 71, 87, 0.1);
+            color: var(--priority-critical);
+        }
+
+        /* Map */
+        .map-container {
+            position: fixed;
+            top: 64px;
+            left: 0; right: 0; bottom: 0;
+        }
+
+        #map {
+            width: 100%;
+            height: 100%;
+            background: var(--bg-primary);
+        }
+
+        .leaflet-control-zoom a {
+            background: var(--bg-secondary) !important;
+            color: var(--text-primary) !important;
+            border: 1px solid var(--border-color) !important;
+        }
+
+        /* Markers */
+        .event-marker {
+            background: linear-gradient(135deg, var(--accent-orange), var(--accent-amber));
+            border-radius: 50%;
+            border: 3px solid rgba(255, 159, 67, 0.5);
+            box-shadow: var(--glow-orange);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--bg-primary);
+            font-weight: 700;
+            cursor: pointer;
+            animation: pulse 2s infinite;
+        }
+
+        .event-marker.critical { background: linear-gradient(135deg, var(--priority-critical), #ff6b81); }
+        .event-marker.high { background: linear-gradient(135deg, var(--priority-high), var(--accent-amber)); }
+        .event-marker.medium { background: linear-gradient(135deg, var(--priority-medium), #ffe066); }
+        .event-marker.low { background: linear-gradient(135deg, var(--priority-low), #20bf6b); }
+
+        @keyframes pulse {
+            0%, 100% { box-shadow: 0 0 20px rgba(255, 159, 67, 0.4); }
+            50% { box-shadow: 0 0 35px rgba(255, 159, 67, 0.7); }
+        }
+
+        /* Sidebar */
+        .sidebar {
+            position: fixed;
+            top: 84px;
+            right: 20px;
+            width: 380px;
+            max-height: calc(100vh - 180px);
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            z-index: 500;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .sidebar-header {
+            padding: 16px 20px;
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .sidebar-title {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-weight: 600;
+        }
+
+        .live-indicator {
+            width: 8px; height: 8px;
+            background: var(--accent-green);
+            border-radius: 50%;
+            animation: blink 1.5s infinite;
+        }
+
+        .live-indicator.loading { background: var(--accent-orange); }
+        .live-indicator.error { background: var(--priority-critical); }
+
+        @keyframes blink {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.3; }
+        }
+
+        .event-list {
+            flex: 1;
+            overflow-y: auto;
+            padding: 8px 0;
+        }
+
+        .event-item {
+            padding: 14px 20px;
+            border-bottom: 1px solid rgba(255, 160, 50, 0.08);
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            gap: 12px;
+        }
+
+        .event-item:hover {
+            background: rgba(255, 159, 67, 0.08);
+        }
+
+        .event-indicator {
+            width: 10px; height: 10px;
+            border-radius: 50%;
+            margin-top: 5px;
+            flex-shrink: 0;
+        }
+
+        .event-indicator.critical { background: var(--priority-critical); }
+        .event-indicator.high { background: var(--priority-high); }
+        .event-indicator.medium { background: var(--priority-medium); }
+        .event-indicator.low { background: var(--priority-low); }
+
+        .event-content { flex: 1; min-width: 0; }
+        .event-title { font-weight: 600; font-size: 14px; margin-bottom: 6px; }
+        .event-location { font-size: 12px; color: var(--text-secondary); margin-bottom: 8px; }
+        
+        .event-meta { display: flex; align-items: center; gap: 10px; }
+
+        .priority-badge {
+            padding: 3px 8px;
+            border-radius: 4px;
+            font-size: 10px;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .priority-badge.critical { background: rgba(255, 71, 87, 0.2); color: var(--priority-critical); }
+        .priority-badge.high { background: rgba(255, 159, 67, 0.2); color: var(--priority-high); }
+        .priority-badge.medium { background: rgba(255, 192, 72, 0.2); color: var(--priority-medium); }
+        .priority-badge.low { background: rgba(38, 222, 129, 0.2); color: var(--priority-low); }
+
+        .event-time {
+            font-size: 11px;
+            color: var(--text-muted);
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        .verification-badge {
+            font-size: 10px;
+            padding: 2px 6px;
+            border-radius: 4px;
+            background: rgba(77, 171, 247, 0.2);
+            color: var(--accent-blue);
+        }
+
+        /* Stats Bar */
+        .stats-bar {
+            position: fixed;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            padding: 16px 32px;
+            display: flex;
+            gap: 40px;
+            z-index: 500;
+        }
+
+        .stat-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            cursor: pointer;
+            padding: 8px;
+            border-radius: 8px;
+            transition: all 0.3s ease;
+        }
+
+        .stat-item:hover { background: rgba(255, 159, 67, 0.1); }
+        .stat-item.active { background: rgba(255, 159, 67, 0.2); }
+
+        .stat-icon {
+            width: 36px; height: 36px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .stat-icon.total { background: rgba(77, 171, 247, 0.15); color: var(--accent-blue); }
+        .stat-icon.critical { background: rgba(255, 71, 87, 0.15); color: var(--priority-critical); }
+        .stat-icon.high { background: rgba(255, 159, 67, 0.15); color: var(--priority-high); }
+        .stat-icon.verified { background: rgba(38, 222, 129, 0.15); color: var(--accent-green); }
+
+        .stat-value {
+            font-size: 22px;
+            font-weight: 700;
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        .stat-label {
+            font-size: 11px;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+        }
+
+        /* Popup */
+        .leaflet-popup-content-wrapper {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+        }
+
+        .leaflet-popup-content {
+            margin: 0;
+            color: var(--text-primary);
+            font-family: 'Space Grotesk', sans-serif;
+        }
+
+        .leaflet-popup-tip {
+            background: var(--bg-card);
+        }
+
+        .popup-content { padding: 16px; min-width: 280px; }
+        .popup-title { font-weight: 600; font-size: 15px; margin-bottom: 8px; }
+        .popup-location { font-size: 12px; color: var(--text-secondary); margin-bottom: 10px; }
+        .popup-source { font-size: 11px; color: var(--accent-blue); margin-top: 10px; }
+        .popup-source a { color: var(--accent-blue); }
+
+        /* Notification */
+        .notification {
+            position: fixed;
+            top: 80px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            padding: 12px 24px;
+            border-radius: 10px;
+            z-index: 2000;
+            animation: slideDown 0.3s ease;
+        }
+
+        @keyframes slideDown {
+            from { opacity: 0; transform: translateX(-50%) translateY(-20px); }
+            to { opacity: 1; transform: translateX(-50%) translateY(0); }
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .sidebar {
+                width: calc(100% - 40px);
+                right: 20px;
+                max-height: 250px;
+                bottom: 120px;
+                top: auto;
+            }
+
+            .stats-bar {
+                width: calc(100% - 40px);
+                padding: 12px 16px;
+                gap: 16px;
+            }
+
+            .stat-item { flex-direction: column; gap: 4px; padding: 4px; }
+            .stat-icon { width: 28px; height: 28px; font-size: 14px; }
+            .stat-value { font-size: 16px; }
+            .stat-label { font-size: 8px; }
+
+            .config-panel { width: calc(100% - 40px); left: 20px; }
+        }
+    </style>
+</head>
+<body>
+    <header class="header">
+        <div class="logo">
+            <div class="logo-icon">🌐</div>
+            <div class="logo-text">
+                <span class="logo-title">OSINT Globe</span>
+                <span class="logo-subtitle">Geopolitical Event Tracker</span>
+            </div>
+        </div>
+
+        <div class="header-actions">
+            <button class="btn btn-secondary" onclick="toggleConfig()">⚙️ Config</button>
+            <button class="btn btn-primary" onclick="fetchEvents()">🔄 Refresh</button>
+        </div>
+    </header>
+
+    <!-- Config Panel -->
+    <div class="config-panel" id="configPanel">
+        <div class="config-title">⚙️ Backend Configuration</div>
+        
+        <label class="config-label">API URL (ton backend Vercel)</label>
+        <input type="text" class="config-input" id="apiUrl" placeholder="https://ton-backend.vercel.app/api/events">
+        
+        <label class="config-label">Search Query</label>
+        <input type="text" class="config-input" id="searchQuery" value="conflict OR military OR protest OR crisis">
+        
+        <button class="btn btn-primary" style="width: 100%;" onclick="saveConfigAndFetch()">
+            💾 Save & Fetch
+        </button>
+        
+        <div class="config-status" id="configStatus" style="display: none;"></div>
+    </div>
+
+    <!-- Map -->
+    <div class="map-container">
+        <div id="map"></div>
+    </div>
+
+    <!-- Sidebar -->
+    <aside class="sidebar">
+        <div class="sidebar-header">
+            <div class="sidebar-title">
+                <div class="live-indicator" id="statusIndicator"></div>
+                <span id="statusText">Live Event Feed</span>
+            </div>
+            <span id="eventCount" style="color: var(--text-muted); font-size: 12px;">0 events</span>
+        </div>
+        <div class="event-list" id="eventList">
+            <div style="padding: 40px; text-align: center; color: var(--text-muted);">
+                <div style="font-size: 40px; margin-bottom: 12px;">⚙️</div>
+                <div>Configure your backend URL</div>
+                <div style="font-size: 12px; margin-top: 8px;">Click "Config" to set your API</div>
+            </div>
+        </div>
+    </aside>
+
+    <!-- Stats Bar -->
+    <div class="stats-bar">
+        <div class="stat-item" onclick="filterEvents('all')">
+            <div class="stat-icon total">📊</div>
+            <div>
+                <span class="stat-value" id="totalEvents">0</span>
+                <span class="stat-label">Total</span>
+            </div>
+        </div>
+        <div class="stat-item" onclick="filterEvents('critical')">
+            <div class="stat-icon critical">⚠️</div>
+            <div>
+                <span class="stat-value" id="criticalEvents">0</span>
+                <span class="stat-label">Critical</span>
+            </div>
+        </div>
+        <div class="stat-item" onclick="filterEvents('high')">
+            <div class="stat-icon high">🔥</div>
+            <div>
+                <span class="stat-value" id="highEvents">0</span>
+                <span class="stat-label">High</span>
+            </div>
+        </div>
+        <div class="stat-item" onclick="filterEvents('verified')">
+            <div class="stat-icon verified">✓</div>
+            <div>
+                <span class="stat-value" id="verifiedEvents">0</span>
+                <span class="stat-label">Verified</span>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ============================================
+        // CONFIGURATION
+        // ============================================
+        
+        // ⚠️ CHANGE THIS TO YOUR VERCEL BACKEND URL
+        let API_URL = localStorage.getItem('osint_api_url') || '';
+        let SEARCH_QUERY = localStorage.getItem('osint_query') || 'conflict OR military OR protest OR crisis';
+
+        // ============================================
+        // MAP SETUP
+        // ============================================
+        const map = L.map('map', {
+            center: [30, 30],
+            zoom: 3,
+            minZoom: 2,
+            maxZoom: 18,
+            zoomControl: true
+        });
+
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+            attribution: '© OpenStreetMap © CARTO',
+            subdomains: 'abcd'
+        }).addTo(map);
+
+        // ============================================
+        // STATE
+        // ============================================
+        let events = [];
+        let markers = [];
+        let activeFilter = 'all';
+
+        const eventIcons = {
+            military: '🎖️',
+            political: '🏛️',
+            protest: '✊',
+            disaster: '🌊',
+            cyber: '💻',
+            terrorism: '💥'
+        };
+
+        // ============================================
+        // CONFIG PANEL
+        // ============================================
+        function toggleConfig() {
+            const panel = document.getElementById('configPanel');
+            panel.classList.toggle('active');
+            
+            // Load saved values
+            document.getElementById('apiUrl').value = API_URL;
+            document.getElementById('searchQuery').value = SEARCH_QUERY;
+        }
+
+        function saveConfigAndFetch() {
+            API_URL = document.getElementById('apiUrl').value.trim();
+            SEARCH_QUERY = document.getElementById('searchQuery').value.trim();
+            
+            // Save to localStorage
+            localStorage.setItem('osint_api_url', API_URL);
+            localStorage.setItem('osint_query', SEARCH_QUERY);
+            
+            const status = document.getElementById('configStatus');
+            
+            if (!API_URL) {
+                status.textContent = '❌ Please enter your backend URL';
+                status.className = 'config-status error';
+                status.style.display = 'block';
+                return;
+            }
+            
+            status.textContent = '✅ Saved! Fetching data...';
+            status.className = 'config-status success';
+            status.style.display = 'block';
+            
+            // Hide config panel and fetch
+            setTimeout(() => {
+                document.getElementById('configPanel').classList.remove('active');
+                fetchEvents();
+            }, 500);
+        }
+
+        // ============================================
+        // FETCH EVENTS FROM YOUR BACKEND
+        // ============================================
+        async function fetchEvents() {
+            if (!API_URL) {
+                showNotification('⚙️ Please configure your backend URL first');
+                toggleConfig();
+                return;
+            }
+
+            setStatus('loading', 'Loading...');
+            
+            try {
+                const url = `${API_URL}?q=${encodeURIComponent(SEARCH_QUERY)}&limit=75`;
+                console.log('Fetching:', url);
+                
+                const response = await fetch(url);
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+                
+                const data = await response.json();
+                
+                if (data.success && data.events && data.events.length > 0) {
+                    events = data.events.map((e, i) => ({
+                        id: i + 1,
+                        title: e.title,
+                        category: e.category || 'political',
+                        priority: e.priority || 'medium',
+                        lat: e.lat,
+                        lng: e.lng,
+                        location: e.location,
+                        description: e.description,
+                        source: e.source,
+                        verificationScore: e.verificationScore || 50,
+                        time: new Date(e.timestamp)
+                    }));
+                    
+                    renderEvents();
+                    setStatus('live', 'Live Event Feed');
+                    showNotification(`✅ Loaded ${events.length} events`);
+                } else {
+                    throw new Error(data.error || 'No events found');
+                }
+                
+            } catch (error) {
+                console.error('Fetch error:', error);
+                setStatus('error', 'Connection Error');
+                showNotification(`❌ ${error.message}`);
+            }
+        }
+
+        // ============================================
+        // RENDER EVENTS
+        // ============================================
+        function renderEvents() {
+            // Clear markers
+            markers.forEach(m => map.removeLayer(m));
+            markers = [];
+            
+            // Add markers
+            events.forEach(event => {
+                if (event.lat && event.lng) {
+                    const icon = L.divIcon({
+                        className: 'custom-marker',
+                        html: `<div class="event-marker ${event.priority}" style="width: 32px; height: 32px; font-size: 14px;">
+                            ${eventIcons[event.category] || '📍'}
+                        </div>`,
+                        iconSize: [32, 32],
+                        iconAnchor: [16, 16]
+                    });
+
+                    const marker = L.marker([event.lat, event.lng], { icon })
+                        .addTo(map)
+                        .bindPopup(`
+                            <div class="popup-content">
+                                <div class="popup-title">${eventIcons[event.category] || '📍'} ${event.title}</div>
+                                <div class="popup-location">📍 ${event.location}</div>
+                                <div style="display: flex; gap: 8px; margin-top: 8px;">
+                                    <span class="priority-badge ${event.priority}">${event.priority}</span>
+                                    <span class="verification-badge">${event.verificationScore}% verified</span>
+                                </div>
+                                ${event.source ? `<div class="popup-source">Source: <a href="${event.source.url}" target="_blank">${event.source.name}</a></div>` : ''}
+                            </div>
+                        `);
+
+                    marker.eventId = event.id;
+                    markers.push(marker);
+                }
+            });
+
+            // Render list
+            renderEventList(events);
+            
+            // Update stats
+            updateStats();
+        }
+
+        function renderEventList(eventsToShow) {
+            const list = document.getElementById('eventList');
+            document.getElementById('eventCount').textContent = `${eventsToShow.length} events`;
+            
+            if (eventsToShow.length === 0) {
+                list.innerHTML = `
+                    <div style="padding: 40px; text-align: center; color: var(--text-muted);">
+                        <div style="font-size: 40px; margin-bottom: 12px;">🔍</div>
+                        <div>No events found</div>
+                    </div>
+                `;
+                return;
+            }
+            
+            list.innerHTML = eventsToShow.map(event => `
+                <div class="event-item" onclick="focusEvent(${event.id})">
+                    <div class="event-indicator ${event.priority}"></div>
+                    <div class="event-content">
+                        <div class="event-title">${eventIcons[event.category] || '📍'} ${event.title}</div>
+                        <div class="event-location">📍 ${event.location}</div>
+                        <div class="event-meta">
+                            <span class="priority-badge ${event.priority}">${event.priority}</span>
+                            <span class="verification-badge">${event.verificationScore}%</span>
+                            <span class="event-time">${formatTime(event.time)}</span>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function focusEvent(id) {
+            const event = events.find(e => e.id === id);
+            if (event && event.lat && event.lng) {
+                map.flyTo([event.lat, event.lng], 6, { duration: 1 });
+                const marker = markers.find(m => m.eventId === id);
+                if (marker) setTimeout(() => marker.openPopup(), 500);
+            }
+        }
+
+        // ============================================
+        // FILTERS
+        // ============================================
+        function filterEvents(filter) {
+            activeFilter = filter;
+            
+            // Update active state
+            document.querySelectorAll('.stat-item').forEach(el => el.classList.remove('active'));
+            event.currentTarget?.classList.add('active');
+            
+            let filtered = events;
+            
+            if (filter === 'critical') {
+                filtered = events.filter(e => e.priority === 'critical');
+            } else if (filter === 'high') {
+                filtered = events.filter(e => e.priority === 'high');
+            } else if (filter === 'verified') {
+                filtered = events.filter(e => e.verificationScore >= 70);
+            }
+            
+            // Update markers visibility
+            markers.forEach(m => {
+                const event = events.find(e => e.id === m.eventId);
+                if (filter === 'all' || 
+                    (filter === 'critical' && event?.priority === 'critical') ||
+                    (filter === 'high' && event?.priority === 'high') ||
+                    (filter === 'verified' && event?.verificationScore >= 70)) {
+                    m.addTo(map);
+                } else {
+                    map.removeLayer(m);
+                }
+            });
+            
+            renderEventList(filtered);
+        }
+
+        // ============================================
+        // HELPERS
+        // ============================================
+        function updateStats() {
+            document.getElementById('totalEvents').textContent = events.length;
+            document.getElementById('criticalEvents').textContent = events.filter(e => e.priority === 'critical').length;
+            document.getElementById('highEvents').textContent = events.filter(e => e.priority === 'high').length;
+            document.getElementById('verifiedEvents').textContent = events.filter(e => e.verificationScore >= 70).length;
+        }
+
+        function formatTime(date) {
+            if (!date) return '';
+            const diff = Date.now() - date.getTime();
+            const hours = Math.floor(diff / (1000 * 60 * 60));
+            if (hours < 1) return 'just now';
+            if (hours < 24) return `${hours}h ago`;
+            return `${Math.floor(hours / 24)}d ago`;
+        }
+
+        function setStatus(status, text) {
+            const indicator = document.getElementById('statusIndicator');
+            const statusText = document.getElementById('statusText');
+            
+            indicator.className = 'live-indicator';
+            if (status === 'loading') indicator.classList.add('loading');
+            if (status === 'error') indicator.classList.add('error');
+            
+            statusText.textContent = text;
+        }
+
+        function showNotification(message) {
+            const existing = document.querySelector('.notification');
+            if (existing) existing.remove();
+            
+            const notif = document.createElement('div');
+            notif.className = 'notification';
+            notif.textContent = message;
+            document.body.appendChild(notif);
+            
+            setTimeout(() => notif.remove(), 3000);
+        }
+
+        // ============================================
+        // INIT
+        // ============================================
+        // Auto-fetch if URL is configured
+        if (API_URL) {
+            fetchEvents();
+        } else {
+            setStatus('error', 'Not Configured');
+        }
+
+        // Auto-refresh every 5 minutes
+        setInterval(() => {
+            if (API_URL) fetchEvents();
+        }, 5 * 60 * 1000);
+    </script>
+</body>
+</html>
